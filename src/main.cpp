@@ -10,6 +10,17 @@
 #include <ESPAsyncWebServer.h>
 #include <ESPAsyncTCP.h>
 #include "LittleFS.h"
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// Data wire is plugged into port 2 on the Arduino
+#define ONE_WIRE_BUS 5
+
+// Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
+OneWire oneWire(ONE_WIRE_BUS);
+
+// Pass our oneWire reference to Dallas Temperature.
+DallasTemperature sensors(&oneWire);
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -129,7 +140,13 @@ bool initWiFi()
     WiFi.begin(ssid.c_str(), pass.c_str());
 
     Serial.println("Connecting to WiFi...");
-    delay(20000);
+    previousMillis = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - previousMillis < interval)
+    {
+        delay(500);
+        Serial.print(".");
+    }
+
     if (WiFi.status() != WL_CONNECTED)
     {
         Serial.println("Failed to connect.");
@@ -168,6 +185,8 @@ void setup()
     // Set GPIO 2 as an OUTPUT
     pinMode(ledPin, OUTPUT);
     digitalWrite(ledPin, LOW);
+
+    sensors.begin();
 
     // Load values saved in LittleFS
     ssid = readFile(LittleFS, ssidPath);
@@ -266,9 +285,25 @@ void setup()
 
 void loop()
 {
+    static int count = 0;
+
     if (restart)
     {
         delay(5000);
         ESP.restart();
     }
+
+    delay(1000);
+
+    Serial.print("Requesting temperatures...");
+    sensors.requestTemperatures(); // Send the command to get temperatures
+    Serial.println("DONE");
+
+    Serial.print("Temperature for the device 1 (index 0) is: ");
+    Serial.println(sensors.getTempCByIndex(0));
+
+    count++;
+    sensors.setUserDataByIndex(0, count);
+    int x = sensors.getUserDataByIndex(0);
+    Serial.println(count);
 }
