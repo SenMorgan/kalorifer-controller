@@ -1,0 +1,4 @@
+[env]
+build_flags =
+  	'-DAP_SSID="***"'
+    '-DAP_PASS="***"'
