@@ -63,8 +63,10 @@ IPAddress local_gateway;
 IPAddress subnet(255, 255, 0, 0);
 
 String status_led_state;
-boolean restart;
+boolean restart, relay_status;
 float air_temp, air_hum, water_temp;
+float water_temp_threshold_hi = 70.0;
+float water_temp_threshold_lo = 60.0;
 
 // Initialize LittleFS
 void fs_init()
@@ -366,6 +368,20 @@ void read_sensors()
     }
 }
 
+void relay_process()
+{
+    if (water_temp >= water_temp_threshold_hi && !relay_status)
+    {
+        digitalWrite(RELAY_PIN, HIGH);
+        relay_status = true;
+    }
+    else if (water_temp <= water_temp_threshold_lo && relay_status)
+    {
+        digitalWrite(RELAY_PIN, LOW);
+        relay_status = false;
+    }
+}
+
 void loop()
 {
     if (restart)
@@ -375,6 +391,7 @@ void loop()
     }
 
     read_sensors();
+    relay_process();
 
     delay(1000);
 }
