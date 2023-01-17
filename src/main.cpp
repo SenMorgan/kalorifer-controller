@@ -12,12 +12,18 @@
 #include "LittleFS.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <DHT_U.h>
 
 // Data wire is plugged into port 2 on the Arduino
 #define ONE_WIRE_BUS 5
+#define DHT_PIN      14
 
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
+
+DHT_Unified dht(DHT_PIN, DHT11);
 
 // Pass our oneWire reference to Dallas Temperature.
 DallasTemperature sensors(&oneWire);
@@ -188,6 +194,8 @@ void setup()
 
     sensors.begin();
 
+    dht.begin();
+
     // Load values saved in LittleFS
     ssid = readFile(LittleFS, ssidPath);
     pass = readFile(LittleFS, passPath);
@@ -285,8 +293,6 @@ void setup()
 
 void loop()
 {
-    static int count = 0;
-
     if (restart)
     {
         delay(5000);
@@ -302,8 +308,29 @@ void loop()
     Serial.print("Temperature for the device 1 (index 0) is: ");
     Serial.println(sensors.getTempCByIndex(0));
 
-    count++;
-    sensors.setUserDataByIndex(0, count);
-    int x = sensors.getUserDataByIndex(0);
-    Serial.println(count);
+    // Get temperature event and print its value.
+    sensors_event_t event;
+    dht.temperature().getEvent(&event);
+    if (isnan(event.temperature))
+    {
+        Serial.println(F("Error reading temperature!"));
+    }
+    else
+    {
+        Serial.print(F("Temperature: "));
+        Serial.print(event.temperature);
+        Serial.println(F("°C"));
+    }
+    // Get humidity event and print its value.
+    dht.humidity().getEvent(&event);
+    if (isnan(event.relative_humidity))
+    {
+        Serial.println(F("Error reading humidity!"));
+    }
+    else
+    {
+        Serial.print(F("Humidity: "));
+        Serial.print(event.relative_humidity);
+        Serial.println(F("%"));
+    }
 }
