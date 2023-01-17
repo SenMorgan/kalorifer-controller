@@ -82,11 +82,12 @@ float water_temp_threshold_lo = 55.0;
 // Get Sensor data and return JSON object
 String get_sensors_data()
 {
-    readings["temperature"] = air_temp;
-    readings["humidity"] = air_hum;
+    readings["air_temp"] = air_temp;
+    readings["air_hum"] = air_hum;
     readings["water_temp"] = water_temp;
     readings["water_temp_threshold_hi"] = water_temp_threshold_hi;
     readings["water_temp_threshold_lo"] = water_temp_threshold_lo;
+    readings["relay_state"] = digitalRead(RELAY_PIN);
 
     String jsonString = JSON.stringify(readings);
     return jsonString;
@@ -192,20 +193,11 @@ bool wifi_init()
     return true;
 }
 
-String processor(const String &var)
-{
-    if (var == "RELAY_STATE")
-    {
-        return relay_state ? "ON" : "OFF";
-    }
-    return String();
-}
-
 void kalorifer_web_page()
 {
     // Route for root / web page
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send(LittleFS, "/index.html", "text/html", false, processor); });
+              { request->send(LittleFS, "/index.html", "text/html"); });
 
     server.serveStatic("/", LittleFS, "/");
 
@@ -215,7 +207,7 @@ void kalorifer_web_page()
                     digitalWrite(RELAY_PIN, HIGH);
                     digitalWrite(STATUS_LED, LOW);
                     relay_state = true;
-                    request->send(LittleFS, "/index.html", "text/html", false, processor); });
+                    request->send(LittleFS, "/index.html", "text/html"); });
 
     // Route to set GPIO state to LOW
     server.on("/off", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -223,7 +215,7 @@ void kalorifer_web_page()
                     digitalWrite(RELAY_PIN, LOW);
                     digitalWrite(STATUS_LED, HIGH);
                     relay_state = false;
-                    request->send(LittleFS, "/index.html", "text/html", false, processor); });
+                    request->send(LittleFS, "/index.html", "text/html"); });
 
     // Request for the latest sensor readings
     server.on("/readings", HTTP_GET, [](AsyncWebServerRequest *request)
