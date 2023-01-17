@@ -18,20 +18,24 @@
   <div class="content">
     <div class="card-grid">
       <div class="card">
-        <p class="card-title"><i class="fa-regular fa-fan"></i> Kalorifer Motor</p>
+        <p class="card-title"><i class="fas fa-fan"></i> Kalorifer</p>
         <p>
           <a href="on"><button class="button-on">ON</button></a>
           <a href="off"><button class="button-off">OFF</button></a>
         </p>
-        <p class="relay">State: %RELAY_STATE%</p>
+        <p class="relay">Relay: <span id="relay_state_id">-</span></p>
       </div>
       <div class="card">
-        <p class="card-title">Temperature</p>
-        <canvas id="gauge-temperature"></canvas>
+        <p class="card-title">Water Temperature</p>
+        <canvas id="gauge-water-temperature"></canvas>
       </div>
       <div class="card">
-        <p class="card-title">Humidity</p>
-        <canvas id="gauge-humidity"></canvas>
+        <p class="card-title">Air Temperature</p>
+        <canvas id="gauge-air-temperature"></canvas>
+      </div>
+      <div class="card">
+        <p class="card-title">Air Humidity</p>
+        <canvas id="gauge-air-humidity"></canvas>
       </div>
     </div>
   </div>
