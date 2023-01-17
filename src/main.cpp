@@ -19,6 +19,10 @@
 // Interval to wait for Wi-Fi connection (milliseconds)
 #define WIFI_TIMEOUT_MS 10000
 
+// Maximum water temperature for emergency powering on relay with notification
+#define WATER_ALARM_TEMP_HI 90.0
+#define WATER_ALARM_TEMP_LO 85.0
+
 // Data wire is plugged into port 2 on the Arduino
 #define ONE_WIRE_BUS 5
 #define DHT_PIN      14
@@ -63,7 +67,7 @@ IPAddress local_gateway;
 IPAddress subnet(255, 255, 0, 0);
 
 String status_led_state;
-boolean restart, relay_status;
+boolean restart, relay_state, buzzer_state;
 float air_temp, air_hum, water_temp;
 float water_temp_threshold_hi = 70.0;
 float water_temp_threshold_lo = 60.0;
@@ -370,15 +374,63 @@ void read_sensors()
 
 void relay_process()
 {
-    if (water_temp >= water_temp_threshold_hi && !relay_status)
+    if (water_temp >= water_temp_threshold_hi && !relay_state)
     {
         digitalWrite(RELAY_PIN, HIGH);
-        relay_status = true;
+        relay_state = true;
     }
-    else if (water_temp <= water_temp_threshold_lo && relay_status)
+    else if (water_temp <= water_temp_threshold_lo && relay_state)
     {
         digitalWrite(RELAY_PIN, LOW);
-        relay_status = false;
+        relay_state = false;
+    }
+}
+
+void temp_alarm()
+{
+    if (water_temp >= WATER_ALARM_TEMP_HI && !buzzer_state)
+    {
+        buzzer_state = true;
+        // Toggle kalorifer motor relay a few times for notification
+        if (digitalRead(RELAY_PIN))
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                digitalWrite(RELAY_PIN, LOW);
+                delay(500);
+                digitalWrite(RELAY_PIN, HIGH);
+                delay(500);
+            }
+        }
+        relay_state = true;
+    }
+    else if (water_temp <= WATER_ALARM_TEMP_LO && buzzer_state)
+    {
+        buzzer_state = false;
+    }
+}
+
+void buzzer_process(uint32_t interval)
+{
+    static boolean prev_state, buzzing;
+    static uint32_t last_time;
+
+    if (buzzer_state)
+    {
+        if (prev_state != buzzer_state)
+            prev_state = buzzer_state;
+
+        if (millis() - last_time > interval)
+        {
+            last_time = millis();
+            buzzing = !buzzing;
+            digitalWrite(BUZZER_PIN, buzzing);
+        }
+    }
+    else if (buzzer_state != prev_state)
+    {
+        prev_state = buzzer_state;
+        digitalWrite(BUZZER_PIN, LOW);
     }
 }
 
@@ -392,6 +444,7 @@ void loop()
 
     read_sensors();
     relay_process();
+    buzzer_process(500);
 
     delay(1000);
 }
