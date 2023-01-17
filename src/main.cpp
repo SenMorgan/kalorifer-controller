@@ -19,6 +19,12 @@
 // Data wire is plugged into port 2 on the Arduino
 #define ONE_WIRE_BUS 5
 #define DHT_PIN      14
+#define STATUS_LED   2
+#define RELAY_PIN    4
+#define LED_GREEN    12
+#define LED_BLUE     13
+#define LED_RED      15
+#define BUZZER_PIN   10
 
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
@@ -26,7 +32,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 DHT_Unified dht(DHT_PIN, DHT11);
 
 // Pass our oneWire reference to Dallas Temperature.
-DallasTemperature sensors(&oneWire);
+DallasTemperature dallas(&oneWire);
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -57,16 +63,12 @@ IPAddress localGateway;
 IPAddress subnet(255, 255, 0, 0);
 
 // Timer variables
-unsigned long previousMillis = 0;
+unsigned long previousMillis;
 const long interval = 10000; // interval to wait for Wi-Fi connection (milliseconds)
 
-// Set LED GPIO
-const int ledPin = 2;
-// Stores LED state
-
-String ledState;
-
-boolean restart = false;
+String status_led_state;
+boolean restart;
+float air_temp, air_hum, water_temp;
 
 // Initialize LittleFS
 void initFS()
@@ -168,15 +170,15 @@ String processor(const String &var)
 {
     if (var == "STATE")
     {
-        if (!digitalRead(ledPin))
+        if (!digitalRead(STATUS_LED))
         {
-            ledState = "ON";
+            status_led_state = "ON";
         }
         else
         {
-            ledState = "OFF";
+            status_led_state = "OFF";
         }
-        return ledState;
+        return status_led_state;
     }
     return String();
 }
@@ -188,11 +190,14 @@ void setup()
 
     initFS();
 
-    // Set GPIO 2 as an OUTPUT
-    pinMode(ledPin, OUTPUT);
-    digitalWrite(ledPin, LOW);
+    pinMode(STATUS_LED, OUTPUT);
+    pinMode(RELAY_PIN, OUTPUT);
+    pinMode(LED_GREEN, OUTPUT);
+    pinMode(LED_BLUE, OUTPUT);
+    pinMode(LED_RED, OUTPUT);
+    pinMode(BUZZER_PIN, OUTPUT);
 
-    sensors.begin();
+    dallas.begin();
 
     dht.begin();
 
@@ -217,13 +222,13 @@ void setup()
         // Route to set GPIO state to HIGH
         server.on("/on", HTTP_GET, [](AsyncWebServerRequest *request)
                   {
-                        digitalWrite(ledPin, LOW);
+                        digitalWrite(STATUS_LED, LOW);
                         request->send(LittleFS, "/index.html", "text/html", false, processor); });
 
         // Route to set GPIO state to LOW
         server.on("/off", HTTP_GET, [](AsyncWebServerRequest *request)
                   {
-                        digitalWrite(ledPin, HIGH);
+                        digitalWrite(STATUS_LED, HIGH);
                         request->send(LittleFS, "/index.html", "text/html", false, processor); });
         server.begin();
     }
@@ -291,6 +296,70 @@ void setup()
     }
 }
 
+static void set_rgb(uint8_t r, uint8_t g, uint8_t b)
+{
+    analogWrite(LED_RED, r);
+    analogWrite(LED_GREEN, g);
+    analogWrite(LED_BLUE, b);
+}
+
+void read_sensors()
+{
+    // Get temperature event and print its value.
+    sensors_event_t event;
+    dht.temperature().getEvent(&event);
+    if (!isnan(event.temperature))
+    {
+        air_temp = event.temperature;
+        Serial.print(F("DHT temp: "));
+        Serial.print(air_temp);
+        Serial.println(F("°C"));
+    }
+    else
+    {
+        Serial.println(F("Error reading temperature!"));
+    }
+    // Get humidity event and print its value.
+    dht.humidity().getEvent(&event);
+    if (!isnan(event.relative_humidity))
+    {
+        air_hum = event.relative_humidity;
+        Serial.print(F("DHT hum: "));
+        Serial.print(air_hum);
+        Serial.println(F("%"));
+    }
+    else
+    {
+        Serial.println(F("Error reading humidity!"));
+    }
+
+    dallas.requestTemperatures();
+    water_temp = dallas.getTempCByIndex(0);
+    Serial.print("DS18B20 Temperature: ");
+    Serial.println(water_temp);
+
+    if (water_temp >= 95.0)
+    {
+        set_rgb(255, 0, 0);
+    }
+    else if (water_temp >= 80.0)
+    {
+        set_rgb(255, 140, 0);
+    }
+    else if (water_temp >= 60.0)
+    {
+        set_rgb(255, 255, 0);
+    }
+    else if (water_temp >= 35.0)
+    {
+        set_rgb(0, 255, 255);
+    }
+    else
+    {
+        set_rgb(0, 0, 0);
+    }
+}
+
 void loop()
 {
     if (restart)
@@ -299,38 +368,7 @@ void loop()
         ESP.restart();
     }
 
+    read_sensors();
+
     delay(1000);
-
-    Serial.print("Requesting temperatures...");
-    sensors.requestTemperatures(); // Send the command to get temperatures
-    Serial.println("DONE");
-
-    Serial.print("Temperature for the device 1 (index 0) is: ");
-    Serial.println(sensors.getTempCByIndex(0));
-
-    // Get temperature event and print its value.
-    sensors_event_t event;
-    dht.temperature().getEvent(&event);
-    if (isnan(event.temperature))
-    {
-        Serial.println(F("Error reading temperature!"));
-    }
-    else
-    {
-        Serial.print(F("Temperature: "));
-        Serial.print(event.temperature);
-        Serial.println(F("°C"));
-    }
-    // Get humidity event and print its value.
-    dht.humidity().getEvent(&event);
-    if (isnan(event.relative_humidity))
-    {
-        Serial.println(F("Error reading humidity!"));
-    }
-    else
-    {
-        Serial.print(F("Humidity: "));
-        Serial.print(event.relative_humidity);
-        Serial.println(F("%"));
-    }
 }
