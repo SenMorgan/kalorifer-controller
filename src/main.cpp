@@ -16,6 +16,9 @@
 #include <DHT.h>
 #include <DHT_U.h>
 
+// Interval to wait for Wi-Fi connection (milliseconds)
+#define WIFI_TIMEOUT_MS 10000
+
 // Data wire is plugged into port 2 on the Arduino
 #define ONE_WIRE_BUS 5
 #define DHT_PIN      14
@@ -44,34 +47,27 @@ const char *PARAM_INPUT_3 = "ip";
 const char *PARAM_INPUT_4 = "gateway";
 
 // Variables to save values from HTML form
-String ssid;
-String pass;
-String ip;
-String gateway;
+String ssid, pass, ip, gateway;
 
 // File paths to save input values permanently
-const char *ssidPath = "/ssid.txt";
-const char *passPath = "/pass.txt";
-const char *ipPath = "/ip.txt";
-const char *gatewayPath = "/gateway.txt";
+const char *ssid_path = "/ssid.txt";
+const char *pass_path = "/pass.txt";
+const char *ip_path = "/ip.txt";
+const char *gateway_path = "/gateway.txt";
 
-IPAddress localIP;
-// IPAddress localIP(192, 168, 1, 200); // hardcoded
+IPAddress local_ip;
+// IPAddress local_ip(192, 168, 1, 200); // hardcoded
 
 // Set your Gateway IP address
-IPAddress localGateway;
+IPAddress local_gateway;
 IPAddress subnet(255, 255, 0, 0);
-
-// Timer variables
-unsigned long previousMillis;
-const long interval = 10000; // interval to wait for Wi-Fi connection (milliseconds)
 
 String status_led_state;
 boolean restart;
 float air_temp, air_hum, water_temp;
 
 // Initialize LittleFS
-void initFS()
+void fs_init()
 {
     if (!LittleFS.begin())
     {
@@ -84,7 +80,7 @@ void initFS()
 }
 
 // Read File from LittleFS
-String readFile(fs::FS &fs, const char *path)
+String file_read(fs::FS &fs, const char *path)
 {
     Serial.printf("Reading file: %s\r\n", path);
 
@@ -106,7 +102,7 @@ String readFile(fs::FS &fs, const char *path)
 }
 
 // Write file to LittleFS
-void writeFile(fs::FS &fs, const char *path, const char *message)
+void file_write(fs::FS &fs, const char *path, const char *message)
 {
     Serial.printf("Writing file: %s\r\n", path);
 
@@ -128,8 +124,10 @@ void writeFile(fs::FS &fs, const char *path, const char *message)
 }
 
 // Initialize WiFi
-bool initWiFi()
+bool wifi_init()
 {
+    unsigned long timestamp = 0;
+
     if (ssid == "" || ip == "")
     {
         Serial.println("Undefined SSID or IP address.");
@@ -137,10 +135,10 @@ bool initWiFi()
     }
 
     WiFi.mode(WIFI_STA);
-    localIP.fromString(ip.c_str());
-    localGateway.fromString(gateway.c_str());
+    local_ip.fromString(ip.c_str());
+    local_gateway.fromString(gateway.c_str());
 
-    if (!WiFi.config(localIP, localGateway, subnet))
+    if (!WiFi.config(local_ip, local_gateway, subnet))
     {
         Serial.println("STA Failed to configure");
         return false;
@@ -148,8 +146,8 @@ bool initWiFi()
     WiFi.begin(ssid.c_str(), pass.c_str());
 
     Serial.println("Connecting to WiFi...");
-    previousMillis = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - previousMillis < interval)
+    timestamp = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - timestamp < WIFI_TIMEOUT_MS)
     {
         delay(500);
         Serial.print(".");
@@ -188,7 +186,7 @@ void setup()
     // Serial port for debugging purposes
     Serial.begin(115200);
 
-    initFS();
+    fs_init();
 
     pinMode(STATUS_LED, OUTPUT);
     pinMode(RELAY_PIN, OUTPUT);
@@ -202,16 +200,16 @@ void setup()
     dht.begin();
 
     // Load values saved in LittleFS
-    ssid = readFile(LittleFS, ssidPath);
-    pass = readFile(LittleFS, passPath);
-    ip = readFile(LittleFS, ipPath);
-    gateway = readFile(LittleFS, gatewayPath);
+    ssid = file_read(LittleFS, ssid_path);
+    pass = file_read(LittleFS, pass_path);
+    ip = file_read(LittleFS, ip_path);
+    gateway = file_read(LittleFS, gateway_path);
     Serial.println(ssid);
     Serial.println(pass);
     Serial.println(ip);
     Serial.println(gateway);
 
-    if (initWiFi())
+    if (wifi_init())
     {
         // Route for root / web page
         server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -261,7 +259,7 @@ void setup()
             Serial.print("SSID set to: ");
             Serial.println(ssid);
             // Write file to save value
-            writeFile(LittleFS, ssidPath, ssid.c_str());
+            file_write(LittleFS, ssid_path, ssid.c_str());
           }
           // HTTP POST pass value
           if (p->name() == PARAM_INPUT_2) {
@@ -269,7 +267,7 @@ void setup()
             Serial.print("Password set to: ");
             Serial.println(pass);
             // Write file to save value
-            writeFile(LittleFS, passPath, pass.c_str());
+            file_write(LittleFS, pass_path, pass.c_str());
           }
           // HTTP POST ip value
           if (p->name() == PARAM_INPUT_3) {
@@ -277,7 +275,7 @@ void setup()
             Serial.print("IP Address set to: ");
             Serial.println(ip);
             // Write file to save value
-            writeFile(LittleFS, ipPath, ip.c_str());
+            file_write(LittleFS, ip_path, ip.c_str());
           }
           // HTTP POST gateway value
           if (p->name() == PARAM_INPUT_4) {
@@ -285,7 +283,7 @@ void setup()
             Serial.print("Gateway set to: ");
             Serial.println(gateway);
             // Write file to save value
-            writeFile(LittleFS, gatewayPath, gateway.c_str());
+            file_write(LittleFS, gateway_path, gateway.c_str());
           }
           //Serial.printf("POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
         }
@@ -334,9 +332,17 @@ void read_sensors()
     }
 
     dallas.requestTemperatures();
-    water_temp = dallas.getTempCByIndex(0);
-    Serial.print("DS18B20 Temperature: ");
-    Serial.println(water_temp);
+    float val = dallas.getTempCByIndex(0);
+    if (val != DEVICE_DISCONNECTED_C)
+    {
+        water_temp = val;
+        Serial.print("DS18B20 Temperature: ");
+        Serial.println(water_temp);
+    }
+    else
+    {
+        Serial.println("Error reading temperature!");
+    }
 
     if (water_temp >= 95.0)
     {
