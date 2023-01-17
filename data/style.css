@@ -27,7 +27,7 @@ body {
 }
 
 .card-grid {
-  max-width: 1200px;
+  max-width: 1300px;
   margin: 0 auto;
   display: grid;
   grid-gap: 2rem;

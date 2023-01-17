@@ -18,12 +18,20 @@
   <div class="content">
     <div class="card-grid">
       <div class="card">
-        <p class="card-title"><i class="fas fa-fan"></i> Kalorifer</p>
+        <p class="card-title">Kalorifer Control</p>
+        <p class="relay">Motor: <span id="relay_state_id">-</span></p>
         <p>
           <a href="on"><button class="button-on">ON</button></a>
           <a href="off"><button class="button-off">OFF</button></a>
         </p>
-        <p class="relay">Relay: <span id="relay_state_id">-</span></p>
+        <form action="/get">
+          Upper threshold (C):
+          <input type="number" name="water_temp_threshold_hi" id="water_temp_threshold_hi" min="0" max="100"><br>
+          Lower threshold (C):<br>
+          Must be lower than the upper threshold.
+          <input type="number" name="water_temp_threshold_lo" id="water_temp_threshold_lo" min="0" max="100"><br>
+          <input type="submit" value="Submit">
+        </form><br>
       </div>
       <div class="card">
         <p class="card-title">Water Temperature</p>

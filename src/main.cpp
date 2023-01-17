@@ -56,6 +56,8 @@ const char *PARAM_INPUT_1 = "ssid";
 const char *PARAM_INPUT_2 = "pass";
 const char *PARAM_INPUT_3 = "ip";
 const char *PARAM_INPUT_4 = "gateway";
+const char *WATER_THR_HI = "water_temp_threshold_hi";
+const char *WATER_THR_LO = "water_temp_threshold_lo";
 
 // Variables to save values from HTML form
 String ssid, pass, ip, gateway;
@@ -65,6 +67,8 @@ const char *ssid_path = "/ssid.txt";
 const char *pass_path = "/pass.txt";
 const char *ip_path = "/ip.txt";
 const char *gateway_path = "/gateway.txt";
+const char *water_thr_hi_path = "/water_thr_hi.txt";
+const char *water_thr_lo_path = "/water_thr_lo.txt";
 
 IPAddress local_ip;
 // IPAddress local_ip(192, 168, 1, 200); // hardcoded
@@ -217,6 +221,27 @@ void kalorifer_web_page()
                     relay_state = false;
                     request->send(LittleFS, "/index.html", "text/html"); });
 
+    // Route to set threshold values
+    server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+                    if (request->hasParam("water_temp_threshold_hi"))
+                    {
+                        water_temp_threshold_hi = request->getParam("water_temp_threshold_hi")->value().toFloat();
+                        // Save threshold value to LittleFS
+                        file_write(LittleFS, water_thr_hi_path, String(water_temp_threshold_hi).c_str());
+                        Serial.print("water_temp_threshold_hi: ");
+                        Serial.println(water_temp_threshold_hi);
+                    }
+                    if (request->hasParam("water_temp_threshold_lo"))
+                    {
+                        water_temp_threshold_lo = request->getParam("water_temp_threshold_lo")->value().toFloat();
+                        // Save threshold value to LittleFS
+                        file_write(LittleFS, water_thr_lo_path, String(water_temp_threshold_lo).c_str());
+                        Serial.print("water_temp_threshold_lo: ");
+                        Serial.println(water_temp_threshold_lo);
+                    }
+                    request->send(LittleFS, "/index.html", "text/html"); });
+
     // Request for the latest sensor readings
     server.on("/readings", HTTP_GET, [](AsyncWebServerRequest *request)
               {
@@ -231,7 +256,7 @@ void kalorifer_web_page()
                     }
                     // send event with message "hello!", id current millis
                     // and set reconnect delay to 1 second
-                    client->send("hello!", NULL, millis(), 10000); });
+                    client->send("hello from kalorifer!", NULL, millis(), 10000); });
     server.addHandler(&events);
 
     // Start web server
@@ -326,10 +351,15 @@ void setup()
     pass = file_read(LittleFS, pass_path);
     ip = file_read(LittleFS, ip_path);
     gateway = file_read(LittleFS, gateway_path);
+    water_temp_threshold_hi = file_read(LittleFS, water_thr_hi_path).toFloat();
+    water_temp_threshold_lo = file_read(LittleFS, water_thr_lo_path).toFloat();
+
     Serial.println(ssid);
     Serial.println(pass);
     Serial.println(ip);
     Serial.println(gateway);
+    Serial.println(water_temp_threshold_hi);
+    Serial.println(water_temp_threshold_lo);
 
     if (wifi_init())
     {
@@ -347,8 +377,7 @@ void send_data_to_web_page(uint32_t interval)
 
     if ((millis() - timestamp) > interval)
     {
-        // Send Events to the client with the Sensor Readings Every 30 seconds
-        events.send("ping", NULL, millis());
+        // Send Events to the client with the Sensor Readings
         events.send(get_sensors_data().c_str(), "new_readings", millis());
         timestamp = millis();
     }

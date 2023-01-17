@@ -26,6 +26,11 @@ var gaugeWaterTemp = new RadialGauge({
   strokeTicks: true,
   highlights: [
     {
+      "from": 55,
+      "to": 60,
+      "color": "#73FF00"
+    },
+    {
       "from": 80,
       "to": 120,
       "color": "#ff0006"
@@ -147,7 +152,7 @@ function setValues(myObj) {
   gaugeAirTemp.value = myObj.air_temp;
   gaugeAirHum.value = myObj.air_hum;
   gaugeWaterTemp.value = myObj.water_temp;
-  relay_state = myObj.relay_state;
+  var relay_state = myObj.relay_state;
   document.getElementById("relay_state_id").innerHTML = relay_state ? "ON" : "OFF";
 }
 
@@ -158,6 +163,9 @@ function getReadings() {
     if (this.readyState == 4 && this.status == 200) {
       var jsonResponse = JSON.parse(this.responseText);
       setValues(jsonResponse);
+      // Set threshold values only on first reading
+      document.getElementById("water_temp_threshold_hi").value = jsonResponse.water_temp_threshold_hi;
+      document.getElementById("water_temp_threshold_lo").value = jsonResponse.water_temp_threshold_lo;
     }
   };
   xhr.open("GET", "/readings", true);
