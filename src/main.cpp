@@ -323,6 +323,8 @@ void setup()
     pinMode(LED_RED, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
 
+    digitalWrite(STATUS_LED, HIGH);
+
     dallas.begin();
 
     dht.begin();
@@ -441,38 +443,46 @@ void read_sensors(uint32_t interval)
 
 void relay_process()
 {
-    if (water_temp >= water_temp_threshold_hi && !relay_state)
+    static bool cooling_state;
+
+    if (water_temp >= water_temp_threshold_hi && !cooling_state)
     {
         digitalWrite(RELAY_PIN, HIGH);
+        digitalWrite(STATUS_LED, LOW);
+        cooling_state = true;
         relay_state = true;
     }
-    else if (water_temp <= water_temp_threshold_lo && relay_state)
+    else if (water_temp <= water_temp_threshold_lo && cooling_state)
     {
         digitalWrite(RELAY_PIN, LOW);
-        relay_state = false;
+        digitalWrite(STATUS_LED, LOW);
+        cooling_state = false;
+        relay_state = true;
     }
 }
 
 void temp_alarm()
 {
-    if (water_temp >= WATER_ALARM_TEMP_HI && !buzzer_state)
+    static bool alarm_state;
+
+    if (water_temp >= WATER_ALARM_TEMP_HI && !alarm_state)
     {
-        buzzer_state = true;
         // Toggle kalorifer motor relay a few times for notification
-        if (digitalRead(RELAY_PIN))
+        for (int i = 0; i < 3; i++)
         {
-            for (int i = 0; i < 3; i++)
-            {
-                digitalWrite(RELAY_PIN, LOW);
-                delay(500);
-                digitalWrite(RELAY_PIN, HIGH);
-                delay(500);
-            }
+            digitalWrite(RELAY_PIN, LOW);
+            delay(500);
+            digitalWrite(RELAY_PIN, HIGH);
+            delay(500);
         }
+
+        alarm_state = true;
         relay_state = true;
+        buzzer_state = true;
     }
-    else if (water_temp <= WATER_ALARM_TEMP_LO && buzzer_state)
+    else if (water_temp <= WATER_ALARM_TEMP_LO && alarm_state)
     {
+        alarm_state = false;
         buzzer_state = false;
     }
 }
