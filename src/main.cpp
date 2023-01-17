@@ -373,9 +373,9 @@ void read_sensors(uint32_t interval)
         if (!isnan(event.temperature))
         {
             air_temp = event.temperature;
-            Serial.print(F("DHT temp: "));
-            Serial.print(air_temp);
-            Serial.println(F("°C"));
+            // Serial.print(F("DHT temp: "));
+            // Serial.print(air_temp);
+            // Serial.println(F("°C"));
         }
         else
         {
@@ -386,9 +386,9 @@ void read_sensors(uint32_t interval)
         if (!isnan(event.relative_humidity))
         {
             air_hum = event.relative_humidity;
-            Serial.print(F("DHT hum: "));
-            Serial.print(air_hum);
-            Serial.println(F("%"));
+            // Serial.print(F("DHT hum: "));
+            // Serial.print(air_hum);
+            // Serial.println(F("%"));
         }
         else
         {
@@ -400,8 +400,8 @@ void read_sensors(uint32_t interval)
         if (val != DEVICE_DISCONNECTED_C)
         {
             water_temp = val;
-            Serial.print("DS18B20 Temperature: ");
-            Serial.println(water_temp);
+            // Serial.print("DS18B20 Temperature: ");
+            // Serial.println(water_temp);
         }
         else
         {
