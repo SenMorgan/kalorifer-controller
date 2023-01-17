@@ -2,30 +2,40 @@
 <html>
 
 <head>
-  <title>ESP WEB SERVER</title>
+  <title>KALORIFER WEB SERVER</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" type="text/css" href="style.css">
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css"
     integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+  <script src="http://cdn.rawgit.com/Mikhus/canvas-gauges/gh-pages/download/2.1.7/all/gauge.min.js"></script>
 </head>
 
 <body>
   <div class="topnav">
-    <h1>ESP WEB SERVER</h1>
+    <h1>KALORIFER WEB SERVER</h1>
   </div>
   <div class="content">
     <div class="card-grid">
       <div class="card">
-        <p class="card-title"><i class="fas fa-lightbulb"></i> GPIO 2</p>
+        <p class="card-title"><i class="fa-regular fa-fan"></i> Kalorifer Motor</p>
         <p>
           <a href="on"><button class="button-on">ON</button></a>
           <a href="off"><button class="button-off">OFF</button></a>
         </p>
-        <p class="state">State: %STATE%</p>
+        <p class="relay">State: %RELAY_STATE%</p>
+      </div>
+      <div class="card">
+        <p class="card-title">Temperature</p>
+        <canvas id="gauge-temperature"></canvas>
+      </div>
+      <div class="card">
+        <p class="card-title">Humidity</p>
+        <canvas id="gauge-humidity"></canvas>
       </div>
     </div>
   </div>
+  <script src="script.js"></script>
 </body>
 
 </html>

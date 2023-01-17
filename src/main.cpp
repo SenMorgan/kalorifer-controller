@@ -9,6 +9,7 @@
 #include <ESP8266WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPAsyncTCP.h>
+#include <Arduino_JSON.h>
 #include "LittleFS.h"
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -44,6 +45,12 @@ DallasTemperature dallas(&oneWire);
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
+// Create an Event Source on /events
+AsyncEventSource events("/events");
+
+// Json Variable to Hold Sensor Readings
+JSONVar readings;
+
 // Search for parameter in HTTP POST request
 const char *PARAM_INPUT_1 = "ssid";
 const char *PARAM_INPUT_2 = "pass";
@@ -69,8 +76,21 @@ IPAddress subnet(255, 255, 0, 0);
 String status_led_state;
 boolean restart, relay_state, buzzer_state;
 float air_temp, air_hum, water_temp;
-float water_temp_threshold_hi = 70.0;
-float water_temp_threshold_lo = 60.0;
+float water_temp_threshold_hi = 60.0;
+float water_temp_threshold_lo = 55.0;
+
+// Get Sensor data and return JSON object
+String get_sensors_data()
+{
+    readings["temperature"] = air_temp;
+    readings["humidity"] = air_hum;
+    readings["water_temp"] = water_temp;
+    readings["water_temp_threshold_hi"] = water_temp_threshold_hi;
+    readings["water_temp_threshold_lo"] = water_temp_threshold_lo;
+
+    String jsonString = JSON.stringify(readings);
+    return jsonString;
+}
 
 // Initialize LittleFS
 void fs_init()
@@ -151,13 +171,14 @@ bool wifi_init()
     }
     WiFi.begin(ssid.c_str(), pass.c_str());
 
-    Serial.println("Connecting to WiFi...");
+    Serial.print("Connecting to WiFi");
     timestamp = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - timestamp < WIFI_TIMEOUT_MS)
     {
         delay(500);
         Serial.print(".");
     }
+    Serial.println(" Connected");
 
     if (WiFi.status() != WL_CONNECTED)
     {
@@ -165,96 +186,85 @@ bool wifi_init()
         return false;
     }
 
+    Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
+
     return true;
 }
 
-// Replaces placeholder with LED state value
 String processor(const String &var)
 {
-    if (var == "STATE")
+    if (var == "RELAY_STATE")
     {
-        if (!digitalRead(STATUS_LED))
-        {
-            status_led_state = "ON";
-        }
-        else
-        {
-            status_led_state = "OFF";
-        }
-        return status_led_state;
+        return relay_state ? "ON" : "OFF";
     }
     return String();
 }
 
-void setup()
+void kalorifer_web_page()
 {
-    // Serial port for debugging purposes
-    Serial.begin(115200);
+    // Route for root / web page
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(LittleFS, "/index.html", "text/html", false, processor); });
 
-    fs_init();
+    server.serveStatic("/", LittleFS, "/");
 
-    pinMode(STATUS_LED, OUTPUT);
-    pinMode(RELAY_PIN, OUTPUT);
-    pinMode(LED_GREEN, OUTPUT);
-    pinMode(LED_BLUE, OUTPUT);
-    pinMode(LED_RED, OUTPUT);
-    pinMode(BUZZER_PIN, OUTPUT);
+    // Route to set GPIO state to HIGH
+    server.on("/on", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+                    digitalWrite(RELAY_PIN, HIGH);
+                    digitalWrite(STATUS_LED, LOW);
+                    relay_state = true;
+                    request->send(LittleFS, "/index.html", "text/html", false, processor); });
 
-    dallas.begin();
+    // Route to set GPIO state to LOW
+    server.on("/off", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+                    digitalWrite(RELAY_PIN, LOW);
+                    digitalWrite(STATUS_LED, HIGH);
+                    relay_state = false;
+                    request->send(LittleFS, "/index.html", "text/html", false, processor); });
 
-    dht.begin();
+    // Request for the latest sensor readings
+    server.on("/readings", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+                    String json = get_sensors_data();
+                    request->send(200, "application/json", json);
+                    json = String(); });
 
-    // Load values saved in LittleFS
-    ssid = file_read(LittleFS, ssid_path);
-    pass = file_read(LittleFS, pass_path);
-    ip = file_read(LittleFS, ip_path);
-    gateway = file_read(LittleFS, gateway_path);
-    Serial.println(ssid);
-    Serial.println(pass);
-    Serial.println(ip);
-    Serial.println(gateway);
+    events.onConnect([](AsyncEventSourceClient *client)
+                     {
+                    if(client->lastId()){
+                    Serial.printf("Client reconnected! Last message ID that it got is: %u\n", client->lastId());
+                    }
+                    // send event with message "hello!", id current millis
+                    // and set reconnect delay to 1 second
+                    client->send("hello!", NULL, millis(), 10000); });
+    server.addHandler(&events);
 
-    if (wifi_init())
-    {
-        // Route for root / web page
-        server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-                  { request->send(LittleFS, "/index.html", "text/html", false, processor); });
+    // Start web server
+    server.begin();
+}
 
-        server.serveStatic("/", LittleFS, "/");
+void wifi_manager_web_page()
+{
+    // Connect to Wi-Fi network with SSID and password
+    Serial.println("Setting AP (Access Point)");
+    // NULL sets an open Access Point
+    WiFi.softAP(AP_SSID, AP_PASS);
 
-        // Route to set GPIO state to HIGH
-        server.on("/on", HTTP_GET, [](AsyncWebServerRequest *request)
-                  {
-                        digitalWrite(STATUS_LED, LOW);
-                        request->send(LittleFS, "/index.html", "text/html", false, processor); });
+    IPAddress IP = WiFi.softAPIP();
+    Serial.print("AP IP address: ");
+    Serial.println(IP);
 
-        // Route to set GPIO state to LOW
-        server.on("/off", HTTP_GET, [](AsyncWebServerRequest *request)
-                  {
-                        digitalWrite(STATUS_LED, HIGH);
-                        request->send(LittleFS, "/index.html", "text/html", false, processor); });
-        server.begin();
-    }
-    else
-    {
-        // Connect to Wi-Fi network with SSID and password
-        Serial.println("Setting AP (Access Point)");
-        // NULL sets an open Access Point
-        WiFi.softAP(AP_SSID, AP_PASS);
+    // Web Server Root URL
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(LittleFS, "/wifimanager.html", "text/html"); });
 
-        IPAddress IP = WiFi.softAPIP();
-        Serial.print("AP IP address: ");
-        Serial.println(IP);
+    server.serveStatic("/", LittleFS, "/");
 
-        // Web Server Root URL
-        server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-                  { request->send(LittleFS, "/wifimanager.html", "text/html"); });
-
-        server.serveStatic("/", LittleFS, "/");
-
-        server.on("/", HTTP_POST, [](AsyncWebServerRequest *request)
-                  {
+    server.on("/", HTTP_POST, [](AsyncWebServerRequest *request)
+              {
       int params = request->params();
       for(int i=0;i<params;i++){
         AsyncWebParameter* p = request->getParam(i);
@@ -296,7 +306,57 @@ void setup()
       }
       restart = true;
       request->send(200, "text/plain", "Done. ESP will restart, connect to your router and go to IP address: " + ip); });
-        server.begin();
+    server.begin();
+}
+
+void setup()
+{
+    // Serial port for debugging purposes
+    Serial.begin(115200);
+
+    fs_init();
+
+    pinMode(STATUS_LED, OUTPUT);
+    pinMode(RELAY_PIN, OUTPUT);
+    pinMode(LED_GREEN, OUTPUT);
+    pinMode(LED_BLUE, OUTPUT);
+    pinMode(LED_RED, OUTPUT);
+    pinMode(BUZZER_PIN, OUTPUT);
+
+    dallas.begin();
+
+    dht.begin();
+
+    // Load values saved in LittleFS
+    ssid = file_read(LittleFS, ssid_path);
+    pass = file_read(LittleFS, pass_path);
+    ip = file_read(LittleFS, ip_path);
+    gateway = file_read(LittleFS, gateway_path);
+    Serial.println(ssid);
+    Serial.println(pass);
+    Serial.println(ip);
+    Serial.println(gateway);
+
+    if (wifi_init())
+    {
+        kalorifer_web_page();
+    }
+    else
+    {
+        wifi_manager_web_page();
+    }
+}
+
+void send_data_to_web_page(uint32_t interval)
+{
+    static uint32_t timestamp;
+
+    if ((millis() - timestamp) > interval)
+    {
+        // Send Events to the client with the Sensor Readings Every 30 seconds
+        events.send("ping", NULL, millis());
+        events.send(get_sensors_data().c_str(), "new_readings", millis());
+        timestamp = millis();
     }
 }
 
@@ -307,68 +367,75 @@ static void set_rgb(uint8_t r, uint8_t g, uint8_t b)
     analogWrite(LED_BLUE, b);
 }
 
-void read_sensors()
+void read_sensors(uint32_t interval)
 {
-    // Get temperature event and print its value.
-    sensors_event_t event;
-    dht.temperature().getEvent(&event);
-    if (!isnan(event.temperature))
-    {
-        air_temp = event.temperature;
-        Serial.print(F("DHT temp: "));
-        Serial.print(air_temp);
-        Serial.println(F("°C"));
-    }
-    else
-    {
-        Serial.println(F("Error reading temperature!"));
-    }
-    // Get humidity event and print its value.
-    dht.humidity().getEvent(&event);
-    if (!isnan(event.relative_humidity))
-    {
-        air_hum = event.relative_humidity;
-        Serial.print(F("DHT hum: "));
-        Serial.print(air_hum);
-        Serial.println(F("%"));
-    }
-    else
-    {
-        Serial.println(F("Error reading humidity!"));
-    }
+    static uint32_t timestamp;
 
-    dallas.requestTemperatures();
-    float val = dallas.getTempCByIndex(0);
-    if (val != DEVICE_DISCONNECTED_C)
+    if (millis() - timestamp > interval)
     {
-        water_temp = val;
-        Serial.print("DS18B20 Temperature: ");
-        Serial.println(water_temp);
-    }
-    else
-    {
-        Serial.println("Error reading temperature!");
-    }
+        // Get temperature event and print its value.
+        sensors_event_t event;
+        dht.temperature().getEvent(&event);
+        if (!isnan(event.temperature))
+        {
+            air_temp = event.temperature;
+            Serial.print(F("DHT temp: "));
+            Serial.print(air_temp);
+            Serial.println(F("°C"));
+        }
+        else
+        {
+            Serial.println(F("Error reading temperature!"));
+        }
+        // Get humidity event and print its value.
+        dht.humidity().getEvent(&event);
+        if (!isnan(event.relative_humidity))
+        {
+            air_hum = event.relative_humidity;
+            Serial.print(F("DHT hum: "));
+            Serial.print(air_hum);
+            Serial.println(F("%"));
+        }
+        else
+        {
+            Serial.println(F("Error reading humidity!"));
+        }
 
-    if (water_temp >= 95.0)
-    {
-        set_rgb(255, 0, 0);
-    }
-    else if (water_temp >= 80.0)
-    {
-        set_rgb(255, 140, 0);
-    }
-    else if (water_temp >= 60.0)
-    {
-        set_rgb(255, 255, 0);
-    }
-    else if (water_temp >= 35.0)
-    {
-        set_rgb(0, 255, 255);
-    }
-    else
-    {
-        set_rgb(0, 0, 0);
+        dallas.requestTemperatures();
+        float val = dallas.getTempCByIndex(0);
+        if (val != DEVICE_DISCONNECTED_C)
+        {
+            water_temp = val;
+            Serial.print("DS18B20 Temperature: ");
+            Serial.println(water_temp);
+        }
+        else
+        {
+            Serial.println("Error reading temperature!");
+        }
+
+        if (water_temp >= 95.0)
+        {
+            set_rgb(255, 0, 0);
+        }
+        else if (water_temp >= 80.0)
+        {
+            set_rgb(255, 140, 0);
+        }
+        else if (water_temp >= 60.0)
+        {
+            set_rgb(255, 255, 0);
+        }
+        else if (water_temp >= 35.0)
+        {
+            set_rgb(0, 255, 255);
+        }
+        else
+        {
+            set_rgb(0, 0, 0);
+        }
+
+        timestamp = millis();
     }
 }
 
@@ -442,9 +509,9 @@ void loop()
         ESP.restart();
     }
 
-    read_sensors();
+    read_sensors(1000);
     relay_process();
     buzzer_process(500);
 
-    delay(1000);
+    send_data_to_web_page(3000);
 }
